@@ -7,7 +7,7 @@
 #include <SPIFFS.h>
 #include <ArduinoJson.h>
 
-String baseAPIUrl = "https://noi-door-signage.codethecat.dev/";
+String baseAPIUrl = "https://meetingroominfo.testingmachine.eu/";
 DynamicJsonDocument doc(1024);
 char prettyJsonSensorData[512];
 
