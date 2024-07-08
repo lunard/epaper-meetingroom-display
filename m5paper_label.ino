@@ -11,30 +11,26 @@ String baseAPIUrl = "https://meetingroominfo.testingmachine.eu/";
 DynamicJsonDocument doc(1024);
 char prettyJsonSensorData[512];
 
-class CalendarEvent
-{
+class CalendarEvent {
 public:
   String Title;
   String Organizer;
   String StartAt;
   String EndAt;
   bool bookedByLabel;
-  String ToString()
-  {
+  String ToString() {
     return Title + Organizer + StartAt + EndAt;
   }
 };
 
-class SensorData
-{
+class SensorData {
 public:
   int CO2;
   float temperature;
   float humidity;
 };
 
-class Room
-{
+class Room {
 public:
   String email;
   String displayName;
@@ -64,7 +60,7 @@ float tem;
 float hum;
 
 WiFiUDP ntpUDP;
-#define NTP_OFFSET 60 * 60 // In seconds
+#define NTP_OFFSET 60 * 60  // In seconds
 NTPClient timeClient(ntpUDP, "pool.ntp.org", NTP_OFFSET);
 rtc_time_t RTCtime;
 
@@ -83,25 +79,22 @@ long lastReboot = -1;
 int rebootTimeoutInHours = 2;
 
 // Function to read status from URL
-void QueryRoomStatusTask(void *parameter)
-{
-  for (;;) // infinite loop
+void QueryRoomStatusTask(void *parameter) {
+  for (;;)  // infinite loop
   {
     QueryRoomStatus();
     QuerySensorData();
-    vTaskDelay(2000 / portTICK_PERIOD_MS); // delay for 30 sec
+    vTaskDelay(2000 / portTICK_PERIOD_MS);  // delay for 30 sec
   }
 }
 
-void QueryRoomStatus()
-{
+void QueryRoomStatus() {
   HTTPClient http;
   http.begin(baseAPIUrl + "api/room/status");
   http.addHeader("label-id", WiFi.macAddress());
 
   int httpCode = http.GET();
-  if (httpCode == 200)
-  {
+  if (httpCode == 200) {
     String payload = http.getString();
     Serial.println(payload);
     deserializeJson(doc, payload);
@@ -112,12 +105,9 @@ void QueryRoomStatus()
     timeToNextEvent = doc["timeToNextEvent"];
 
     JsonVariant ce = doc["currentEvent"];
-    if (ce.isNull())
-    {
+    if (ce.isNull()) {
       isFree = true;
-    }
-    else
-    {
+    } else {
       isFree = false;
       currentEvent->Title = ce["title"].as<String>();
       currentEvent->Organizer = ce["organizer"].as<String>();
@@ -127,12 +117,9 @@ void QueryRoomStatus()
     }
 
     JsonVariant ne = doc["nextEvent"];
-    if (ne.isNull())
-    {
+    if (ne.isNull()) {
       nextEventFound = false;
-    }
-    else
-    {
+    } else {
       nextEventFound = true;
       nextEvent->Title = ne["title"].as<String>();
       nextEvent->Organizer = ne["organizer"].as<String>();
@@ -146,34 +133,29 @@ void QueryRoomStatus()
     roomStatusChanged = isFirstRoomDataUpdate || currentStatus != newStatus;
     roomDataUpdated = true;
     isFirstRoomDataUpdate = false;
-  }
-  else
-  {
+  } else {
     Serial.println("Error on HTTP request: " + String(httpCode));
   }
   http.end();
 }
 
-void SetupWiFiTask()
-{
+void SetupWiFiTask() {
   // Create a task that will be executed in the QueryRoomStatus function, with priority 1 and executed on core 0
   xTaskCreatePinnedToCore(
-      QueryRoomStatusTask,   /* Function to implement the task */
-      "QueryRoomStatusTask", /* Name of the task */
-      10000,                 /* Stack size in words */
-      NULL,                  /* Task input parameter */
-      1,                     /* Priority of the task */
-      NULL,                  /* Task handle. */
-      1);                    /* Core where the task should run */
+    QueryRoomStatusTask,   /* Function to implement the task */
+    "QueryRoomStatusTask", /* Name of the task */
+    10000,                 /* Stack size in words */
+    NULL,                  /* Task input parameter */
+    1,                     /* Priority of the task */
+    NULL,                  /* Task handle. */
+    1);                    /* Core where the task should run */
 }
 
-void DrawSensorAndClockArea()
-{
+void DrawSensorAndClockArea() {
   canvas.fillRect(0, 0, 200, 540, WHITE);
 }
 
-void RefreshSensorArea()
-{
+void RefreshSensorArea() {
   canvas.setTextColor(BLACK);
   canvas.setTextSize(2);
 
@@ -185,12 +167,9 @@ void RefreshSensorArea()
   // dtostrf(hum, 2, 1, humStr);
 
   canvas.fillRect(0, 60, 200, 540, WHITE);
-  if (sensorData->CO2 > 1200)
-  {
+  if (sensorData->CO2 > 1200) {
     canvas.drawPngFile(SPIFFS, "/CO2-warning-reverse-64.png", 25, 90);
-  }
-  else
-  {
+  } else {
     canvas.drawPngFile(SPIFFS, "/CO2-reverse-64.png", 25, 90);
   }
   canvas.drawString(String(sensorData->CO2), 100, 105);
@@ -204,8 +183,7 @@ void RefreshSensorArea()
   Serial.println("DrawSensorArea done");
 }
 
-void RefreshTime()
-{
+void RefreshTime() {
   canvas.setTextColor(BLACK);
   canvas.setTextSize(2);
 
@@ -215,63 +193,51 @@ void RefreshTime()
   canvas.pushCanvas(0, 0, UPDATE_MODE_DU);
 }
 
-void DrawButtonArea()
-{
+void DrawButtonArea() {
   canvas.fillRect(802, 0, 158, 340, WHITE);
   canvas.fillRect(802, 340, 158, 200, BLACK);
 }
 
-void DrawButtons()
-{
-  if (isFree)
-  {
+void DrawButtons() {
+  if (isFree) {
     if (timeToNextEvent > 15)
       canvas.drawPngFile(SPIFFS, "/add-event-reverse-64.png", 840, 170);
-  }
-  else
-  {
+  } else {
     if (currentEvent->bookedByLabel)
       canvas.drawPngFile(SPIFFS, "/delete-event-reverse-64.png", 840, 170);
   }
   Serial.println("DrawButtons done");
 }
 
-void DrawCalendarEventArea()
-{
+void DrawCalendarEventArea() {
   canvas.fillRect(200, 0, 600, 340, WHITE);
   canvas.fillRect(200, 340, 600, 200, BLACK);
 }
 
-void DrawSeparatorLines()
-{
-  canvas.fillRect(200, 0, 2, 540, BLACK);   // left vertical separator line
-  canvas.fillRect(800, 0, 2, 340, BLACK);   // right vertical separator line - up
-  canvas.fillRect(800, 340, 2, 240, WHITE); // right vertical separator line - down
-  canvas.fillRect(202, 340, 758, 2, BLACK); // right horizontal separator line
+void DrawSeparatorLines() {
+  canvas.fillRect(200, 0, 2, 540, BLACK);    // left vertical separator line
+  canvas.fillRect(800, 0, 2, 340, BLACK);    // right vertical separator line - up
+  canvas.fillRect(800, 340, 2, 240, WHITE);  // right vertical separator line - down
+  canvas.fillRect(202, 340, 758, 2, BLACK);  // right horizontal separator line
 }
 
-void DrawRoomData()
-{
+void DrawRoomData() {
 
   ReadRoomInfo();
 
-  if (associatedRoom != NULL)
-  {
+  if (associatedRoom != NULL) {
     canvas.setTextSize(2);
     canvas.setTextColor(BLACK);
     canvas.drawString(associatedRoom->displayName, 230, 20);
     // Serial.println("Update room name with: " + associatedRoom->displayName);
-  }
-  else
-  {
+  } else {
     Serial.println("Associated room is NULL");
   }
 
   Serial.println("DrawRoomData done");
 }
 
-void ReadRoomInfo()
-{
+void ReadRoomInfo() {
   // TODO: get the info to the backend
 
   HTTPClient http;
@@ -279,8 +245,7 @@ void ReadRoomInfo()
   http.addHeader("label-id", WiFi.macAddress());
 
   int httpCode = http.GET();
-  if (httpCode == 200)
-  {
+  if (httpCode == 200) {
     String payload = http.getString();
     Serial.println(payload);
     deserializeJson(doc, payload);
@@ -288,9 +253,7 @@ void ReadRoomInfo()
     associatedRoom->email = doc["email"].as<String>();
     associatedRoom->displayName = doc["displayName"].as<String>();
     associatedRoom->location = doc["location"].as<String>();
-  }
-  else
-  {
+  } else {
     Serial.println("Error on HTTP request: " + String(httpCode));
   }
   http.end();
@@ -298,16 +261,14 @@ void ReadRoomInfo()
   Serial.println("ReadRoomInfo done");
 }
 
-void QuerySensorData()
-{
+void QuerySensorData() {
   Serial.println("-- QuerySensorData");
   HTTPClient http;
   http.begin(baseAPIUrl + "api/room/airquality");
   http.addHeader("label-id", WiFi.macAddress());
 
   int httpCode = http.GET();
-  if (httpCode == 200)
-  {
+  if (httpCode == 200) {
     String payload = http.getString();
     deserializeJson(doc, payload);
 
@@ -317,29 +278,23 @@ void QuerySensorData()
 
     serializeJsonPretty(doc, prettyJsonSensorData);
     Serial.println(prettyJsonSensorData);
-  }
-  else
-  {
+  } else {
     Serial.println("Error on HTTP request: " + String(httpCode));
   }
   http.end();
 }
 
-void RefreshCurrentEvent()
-{
-  if (!roomDataUpdated)
-  {
+void RefreshCurrentEvent() {
+  if (!roomDataUpdated) {
     Serial.println("RefreshCurrentEvent: data not changed");
     return;
   }
 
-  if (isFree)
-  {
-    if (!wasFree)
-    {
+  if (isFree) {
+    if (!wasFree) {
       // already drew
-      canvas.fillRect(802, 0, 158, 340, WHITE);  // cleanup right upper button area
-      canvas.fillRect(202, 80, 590, 260, WHITE); // cleanup current event Area
+      canvas.fillRect(802, 0, 158, 340, WHITE);   // cleanup right upper button area
+      canvas.fillRect(202, 80, 590, 260, WHITE);  // cleanup current event Area
 
       canvas.setTextColor(BLACK);
       canvas.setTextSize(5);
@@ -350,14 +305,11 @@ void RefreshCurrentEvent()
     }
 
     wasFree = true;
-  }
-  else
-  {
-    if (wasFree)
-    {
+  } else {
+    if (wasFree) {
       // cleanup
-      canvas.fillRect(802, 0, 158, 340, WHITE);  // cleanup right upper button area
-      canvas.fillRect(202, 80, 590, 260, WHITE); // cleanup current event Area
+      canvas.fillRect(802, 0, 158, 340, WHITE);   // cleanup right upper button area
+      canvas.fillRect(202, 80, 590, 260, WHITE);  // cleanup current event Area
     }
     canvas.setTextColor(BLACK);
     canvas.setTextSize(2);
@@ -378,17 +330,15 @@ void RefreshCurrentEvent()
   Serial.println("RefreshCurrentEvent done");
 }
 
-void RefreshNextEvent()
-{
-  if (bookingRoomAreaShown) // this area is used for booking the room
+void RefreshNextEvent() {
+  if (bookingRoomAreaShown)  // this area is used for booking the room
     return;
 
   canvas.setTextColor(WHITE);
   canvas.setTextSize(1);
   // cleanup
   canvas.fillRect(200, 340, 600, 200, BLACK);
-  if (nextEventFound)
-  {
+  if (nextEventFound) {
     canvas.drawString(nextEvent->Title, 230, 370);
     canvas.drawString(nextEvent->Organizer, 230, 440);
     canvas.drawString(nextEvent->StartAt + " - " + nextEvent->EndAt, 230, 480);
@@ -396,8 +346,7 @@ void RefreshNextEvent()
   canvas.pushCanvas(0, 0, UPDATE_MODE_DU);
 }
 
-void DrawTimeToNextEvent()
-{
+void DrawTimeToNextEvent() {
   if (!isFree)
     return;
   // cleanup string
@@ -413,8 +362,7 @@ void DrawTimeToNextEvent()
   canvas.pushCanvas(0, 0, UPDATE_MODE_DU);
 }
 
-void DrawCurrenEventTime()
-{
+void DrawCurrenEventTime() {
   // cleanup string
   canvas.fillRect(205, 280, 595, 40, WHITE);
 
@@ -428,8 +376,7 @@ void DrawCurrenEventTime()
   Serial.println("DrawCurrenEventTime done: " + currentEvent->StartAt + " - " + currentEvent->EndAt);
 }
 
-void InizializeLabel()
-{
+void InizializeLabel() {
 
   // See Font list here https://learn.adafruit.com/adafruit-gfx-graphics-library/using-fonts
   canvas.setFreeFont(&FreeSerif12pt7b);
@@ -449,8 +396,7 @@ void InizializeLabel()
   Serial.println("InizializeLabel done");
 }
 
-void DrawBookRoomArea()
-{
+void DrawBookRoomArea() {
   if (!isFree || timeToNextEvent < 15)
     return;
 
@@ -464,22 +410,18 @@ void DrawBookRoomArea()
 
   canvas.fillRect(430, 370, 130, 130, WHITE);
   canvas.drawString("30", 455, 390);
-  if (timeToNextEvent < 30)
-  {
+  if (timeToNextEvent < 30) {
     button30MinEnabled = false;
     canvas.drawLine(430, 370, 560, 500, BLACK);
-  }
-  else
+  } else
     button30MinEnabled = true;
 
   canvas.fillRect(620, 370, 130, 130, WHITE);
   canvas.drawString("45", 645, 390);
-  if (timeToNextEvent < 45)
-  {
+  if (timeToNextEvent < 45) {
     button45MinEnabled = false;
     canvas.drawLine(620, 370, 750, 500, BLACK);
-  }
-  else
+  } else
     button45MinEnabled = true;
 
   canvas.setTextSize(2);
@@ -490,11 +432,10 @@ void DrawBookRoomArea()
   canvas.pushCanvas(0, 0, UPDATE_MODE_DU);
 }
 
-void DisplayOperationMessage(String operationMessage)
-{
+void DisplayOperationMessage(String operationMessage) {
   // already drew
-  canvas.fillRect(802, 0, 158, 340, WHITE);  // cleanup right upper button area
-  canvas.fillRect(202, 80, 590, 260, WHITE); // cleanup current event Area
+  canvas.fillRect(802, 0, 158, 340, WHITE);   // cleanup right upper button area
+  canvas.fillRect(202, 80, 590, 260, WHITE);  // cleanup current event Area
 
   canvas.setTextColor(BLACK);
   canvas.setTextSize(2);
@@ -504,8 +445,7 @@ void DisplayOperationMessage(String operationMessage)
   canvas.pushCanvas(0, 0, UPDATE_MODE_DU);
 }
 
-void HideBookRoomArea()
-{
+void HideBookRoomArea() {
   canvas.fillRect(200, 340, 600, 200, BLACK);
   canvas.pushCanvas(0, 0, UPDATE_MODE_DU4);
 
@@ -513,39 +453,33 @@ void HideBookRoomArea()
   Serial.println("HideBookRoomArea done");
 }
 
-void SaveS3IconOnSPIFFS(String s3Filename)
-{
+void SaveS3IconOnSPIFFS(String s3Filename) {
   HTTPClient http;
   http.begin("https://codethecat-public.s3.eu-west-1.amazonaws.com/door-signage/" + s3Filename);
-  http.setUserAgent("ESP32");                                             // Set user agent
-  http.addHeader("Host", "codethecat-public.s3.eu-west-1.amazonaws.com"); // Add host header
+  http.setUserAgent("ESP32");                                              // Set user agent
+  http.addHeader("Host", "codethecat-public.s3.eu-west-1.amazonaws.com");  // Add host header
 
   int httpCode = http.GET();
 
-  if (httpCode == 200)
-  {
+  if (httpCode == 200) {
     File file = SPIFFS.open("/" + s3Filename, FILE_WRITE);
-    if (!file)
-    {
+    if (!file) {
       Serial.println("Failed to open file for writing");
       return;
     }
 
     WiFiClient *stream = http.getStreamPtr();
     int count = 0;
-    if (!http.connected())
-    {
+    if (!http.connected()) {
       Serial.println("Not connected!");
     }
 
-    while (stream->available() == 0)
-    {
+    while (stream->available() == 0) {
       Serial.println("Zero bytes availables");
       delay(100);
     }
 
-    while (http.connected() && (stream->available() > 0))
-    {
+    while (http.connected() && (stream->available() > 0)) {
       char c = stream->read();
       file.write(c);
       count++;
@@ -553,25 +487,21 @@ void SaveS3IconOnSPIFFS(String s3Filename)
 
     file.close();
     Serial.println("downloadImage: saved image '" + String(s3Filename) + "' (" + String(count) + " bytes)");
-  }
-  else
-  {
+  } else {
     Serial.println("downloadImage error: " + String(httpCode));
   }
 
   http.end();
 }
 
-void Refresh()
-{
+void Refresh() {
   QuerySensorData();
   RefreshCurrentEvent();
   RefreshNextEvent();
   RefreshSensorArea();
 }
 
-void StartDemo()
-{
+void StartDemo() {
 
   Serial.println("Start demo");
 
@@ -585,8 +515,7 @@ void StartDemo()
   Refresh();
 
   // ----
-  for (int i = timeToNextEvent; i > 0; i--)
-  {
+  for (int i = timeToNextEvent; i > 0; i--) {
     delay(1000);
 
     // Simulate the loop logic
@@ -648,32 +577,27 @@ void StartDemo()
   Serial.println("Demo ended");
 }
 
-bool IsAddOrDeleteCalendarEventButtonClicked(tp_finger_t fingerItem)
-{
+bool IsAddOrDeleteCalendarEventButtonClicked(tp_finger_t fingerItem) {
   // Button Area: 802, 0, 158, 340
   return fingerItem.x >= 802 && fingerItem.x < 960 && fingerItem.y >= 0 && fingerItem.y < 340;
 }
 
-bool Is15MinButtonClicked(tp_finger_t fingerItem)
-{
+bool Is15MinButtonClicked(tp_finger_t fingerItem) {
   // Button Area: 240, 370, 370, 500
   return fingerItem.x >= 240 && fingerItem.x < 370 && fingerItem.y >= 370 && fingerItem.y < 500;
 }
 
-bool Is30MinButtonClicked(tp_finger_t fingerItem)
-{
+bool Is30MinButtonClicked(tp_finger_t fingerItem) {
   // Button Area: 430, 370, 560, 500
   return fingerItem.x >= 430 && fingerItem.x < 560 && fingerItem.y >= 370 && fingerItem.y < 500;
 }
 
-bool Is45MinButtonClicked(tp_finger_t fingerItem)
-{
+bool Is45MinButtonClicked(tp_finger_t fingerItem) {
   // Button Area: 620, 370, 750, 500
   return fingerItem.x >= 620 && fingerItem.x < 750 && fingerItem.y >= 370 && fingerItem.y < 500;
 }
 
-void SetupRTC()
-{
+void SetupRTC() {
 
   M5.RTC.begin();
 
@@ -688,18 +612,15 @@ void SetupRTC()
   Serial.println("SetupRTC done");
 }
 
-long GetRTCTimeAsTotalSeconds()
-{
+long GetRTCTimeAsTotalSeconds() {
   return RTCtime.hour * 60 * 60 + RTCtime.min * 60 + RTCtime.sec;
 }
 
-void RebootedIfNeeded()
-{
+void RebootedIfNeeded() {
 
   long elapsed = GetRTCTimeAsTotalSeconds() - lastReboot;
 
-  if (lastReboot > 0 && elapsed > 60 * 60 * rebootTimeoutInHours)
-  {
+  if (lastReboot > 0 && elapsed > 60 * 60 * rebootTimeoutInHours) {
     lastReboot = GetRTCTimeAsTotalSeconds();
     DisplayOperationMessage("Rebooting..");
     delay(1000);
@@ -707,8 +628,7 @@ void RebootedIfNeeded()
   }
 }
 
-bool BookTheRoom(int duration)
-{
+bool BookTheRoom(int duration) {
   Serial.println("Book the room for " + String(duration) + "minutes");
   HTTPClient http;
   http.begin(baseAPIUrl + "api/room/book/" + String(duration));
@@ -718,8 +638,7 @@ bool BookTheRoom(int duration)
   return httpCode == 200;
 }
 
-bool DeleteRoomBooking()
-{
+bool DeleteRoomBooking() {
   Serial.println("Delete Room booking");
   HTTPClient http;
   http.begin(baseAPIUrl + "api/room/book");
@@ -729,8 +648,7 @@ bool DeleteRoomBooking()
   return httpCode == 200;
 }
 
-void setup()
-{
+void setup() {
   M5.begin();
 
   M5.EPD.SetRotation(0);
@@ -743,8 +661,7 @@ void setup()
 
   randomSeed(analogRead(0));
 
-  if (!SPIFFS.begin(true))
-  {
+  if (!SPIFFS.begin(true)) {
     Serial.println("SPIFFS Mount Failed");
     return;
   }
@@ -759,15 +676,13 @@ void setup()
   Serial.print("Connect to the WiFi '" + wifiSSID + "'");
   int wifiCount = 0;
 
-  while (WiFi.status() != WL_CONNECTED && wifiCount < 15)
-  {
+  while (WiFi.status() != WL_CONNECTED && wifiCount < 15) {
     delay(500);
     Serial.print(".");
     wifiCount++;
   }
 
-  if (WiFi.status() != WL_CONNECTED)
-  {
+  if (WiFi.status() != WL_CONNECTED) {
     // Reboot the device
     canvas.drawString("cannot connect..rebooting!", 600, 100);
     canvas.pushCanvas(0, 0, UPDATE_MODE_DU);
@@ -802,51 +717,44 @@ void setup()
   // StartDemo();
 }
 
-void loop()
-{
+void loop() {
+
+  M5.update();
+  if (M5.BtnP.wasPressed()) {
+    ESP.restart();
+  }
 
   M5.RTC.getTime(&RTCtime);
 
   RebootedIfNeeded();
 
-  if (M5.TP.available())
-  {
-    if (!M5.TP.isFingerUp())
-    {
+  if (M5.TP.available()) {
+    if (!M5.TP.isFingerUp()) {
       M5.TP.update();
       tp_finger_t fingerItem = M5.TP.readFinger(0);
 
-      if (lastTouch.x != fingerItem.x || lastTouch.y != fingerItem.y)
-      {
+      if (lastTouch.x != fingerItem.x || lastTouch.y != fingerItem.y) {
 
         // Update the last finger position
         lastTouch.x = fingerItem.x;
         lastTouch.y = fingerItem.y;
 
-        if (bookingRoomAreaShown)
-        {
+        if (bookingRoomAreaShown) {
           bool booked = false;
           int duration = 0;
-          if (Is15MinButtonClicked(fingerItem))
-          {
+          if (Is15MinButtonClicked(fingerItem)) {
             duration = 15;
-          }
-          else if (button30MinEnabled && Is30MinButtonClicked(fingerItem))
-          {
+          } else if (button30MinEnabled && Is30MinButtonClicked(fingerItem)) {
             duration = 30;
-          }
-          else if (button45MinEnabled && Is45MinButtonClicked(fingerItem))
-          {
+          } else if (button45MinEnabled && Is45MinButtonClicked(fingerItem)) {
             duration = 45;
           }
 
-          if (duration > 0)
-          {
+          if (duration > 0) {
             DisplayOperationMessage("Booking the room..");
             HideBookRoomArea();
             booked = BookTheRoom(duration);
-            if (booked)
-            {
+            if (booked) {
               QueryRoomStatus();
 
               roomDataUpdated = true;
@@ -858,15 +766,11 @@ void loop()
               roomDataUpdated = false;
             }
           }
-        }
-        else
-        {
+        } else {
 
-          if (IsAddOrDeleteCalendarEventButtonClicked(fingerItem))
-          {
+          if (IsAddOrDeleteCalendarEventButtonClicked(fingerItem)) {
 
-            if (!isFree)
-            {
+            if (!isFree) {
               Serial.println("Delete Calendar Event button clicked!");
               DisplayOperationMessage("Freeup the room..");
               DeleteRoomBooking();
@@ -875,9 +779,7 @@ void loop()
               roomDataUpdated = true;
               RefreshCurrentEvent();
               roomDataUpdated = false;
-            }
-            else if (timeToNextEvent > 15)
-            {
+            } else if (timeToNextEvent > 15) {
 
               Serial.println("Add Calendar Event button clicked!");
 
@@ -888,15 +790,12 @@ void loop()
           }
         }
       }
-    }
-    else
-    {
+    } else {
       // Serial.println("Touch point has not been changed!");
     }
   }
 
-  if (roomDataUpdated)
-  {
+  if (roomDataUpdated) {
 
     if (roomStatusChanged)
       Refresh();
@@ -909,8 +808,7 @@ void loop()
   }
 
   long elapsed = GetRTCTimeAsTotalSeconds() - bookingRoomAreaShownElapsedSeconds;
-  if (bookingRoomAreaShown && (!isFree || elapsed >= 6))
-  {
+  if (bookingRoomAreaShown && (!isFree || elapsed >= 6)) {
     bookingRoomAreaShown = false;
     HideBookRoomArea();
   }
