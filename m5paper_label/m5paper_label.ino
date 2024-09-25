@@ -12,29 +12,29 @@ DynamicJsonDocument doc(1024);
 char prettyJsonSensorData[512];
 
 class CalendarEvent {
-public:
-  String Title;
-  String Organizer;
-  String StartAt;
-  String EndAt;
-  bool bookedByLabel;
-  String ToString() {
-    return Title + Organizer + StartAt + EndAt;
-  }
+  public:
+    String Title;
+    String Organizer;
+    String StartAt;
+    String EndAt;
+    bool bookedByLabel;
+    String ToString() {
+      return Title + Organizer + StartAt + EndAt;
+    }
 };
 
 class SensorData {
-public:
-  int CO2;
-  float temperature;
-  float humidity;
+  public:
+    int CO2;
+    float temperature;
+    float humidity;
 };
 
 class Room {
-public:
-  String email;
-  String displayName;
-  String location;
+  public:
+    String email;
+    String displayName;
+    String location;
 };
 
 int timeToNextEvent = 0;
@@ -65,6 +65,7 @@ NTPClient timeClient(ntpUDP, "pool.ntp.org", NTP_OFFSET);
 rtc_time_t RTCtime;
 
 M5EPD_Canvas canvas(&M5.EPD);
+M5EPD_Canvas sensorsCanvas(&M5.EPD);
 
 bool detectTouch = true;
 tp_finger_t lastTouch;
@@ -156,8 +157,8 @@ void DrawSensorAndClockArea() {
 }
 
 void RefreshSensorArea() {
-  canvas.setTextColor(BLACK);
-  canvas.setTextSize(2);
+  sensorsCanvas.setTextColor(BLACK);
+  sensorsCanvas.setTextSize(3);
 
   // M5.SHT30.UpdateData();
   // tem = M5.SHT30.GetTemperature();
@@ -166,31 +167,31 @@ void RefreshSensorArea() {
   // dtostrf(tem, 2, 1, temStr);
   // dtostrf(hum, 2, 1, humStr);
 
-  canvas.fillRect(0, 60, 200, 540, WHITE);
+  sensorsCanvas.fillRect(0, 60, 200, 540, WHITE);
   if (sensorData->CO2 > 1200) {
-    canvas.drawPngFile(SPIFFS, "/CO2-warning-reverse-64.png", 25, 90);
+    sensorsCanvas.drawPngFile(SPIFFS, "/CO2-warning-reverse-64.png", 25, 90);
   } else {
-    canvas.drawPngFile(SPIFFS, "/CO2-reverse-64.png", 25, 90);
+    sensorsCanvas.drawPngFile(SPIFFS, "/CO2-reverse-64.png", 25, 90);
   }
-  canvas.drawString(String(sensorData->CO2), 100, 105);
+  sensorsCanvas.drawString(String(sensorData->CO2), 100, 105);
 
-  canvas.drawPngFile(SPIFFS, "/temperature-reverse-64.png", 25, 230);
-  canvas.drawString(String((int)sensorData->temperature), 95, 245);
+  sensorsCanvas.drawPngFile(SPIFFS, "/temperature-reverse-64.png", 25, 230);
+  sensorsCanvas.drawString(String((int)sensorData->temperature), 95, 245);
 
-  canvas.drawPngFile(SPIFFS, "/humidity-reverse-64.png", 25, 380);
-  canvas.drawString(String((int)sensorData->humidity), 95, 395);
+  sensorsCanvas.drawPngFile(SPIFFS, "/humidity-reverse-64.png", 25, 380);
+  sensorsCanvas.drawString(String((int)sensorData->humidity), 95, 395);
 
   Serial.println("DrawSensorArea done");
 }
 
 void RefreshTime() {
-  canvas.setTextColor(BLACK);
-  canvas.setTextSize(2);
+  sensorsCanvas.setTextColor(BLACK);
+  sensorsCanvas.setTextSize(3);
 
-  canvas.fillRect(0, 0, 200, 60, WHITE);
-  canvas.drawString(String("00" + String(RTCtime.hour)).substring(String(RTCtime.hour).length()) + ":" + String("00" + String(RTCtime.min)).substring(String(RTCtime.min).length()), 50, 20);
+  sensorsCanvas.fillRect(0, 0, 200, 60, WHITE);
+  sensorsCanvas.drawString(String("00" + String(RTCtime.hour)).substring(String(RTCtime.hour).length()) + ":" + String("00" + String(RTCtime.min)).substring(String(RTCtime.min).length()), 50, 20);
 
-  canvas.pushCanvas(0, 0, UPDATE_MODE_DU);
+  sensorsCanvas.pushCanvas(0, 0, UPDATE_MODE_DU);
 }
 
 void DrawButtonArea() {
@@ -334,10 +335,10 @@ void RefreshNextEvent() {
   if (bookingRoomAreaShown)  // this area is used for booking the room
     return;
 
-  canvas.setTextColor(WHITE);
+  canvas.setTextColor(BLACK);
   canvas.setTextSize(1);
   // cleanup
-  canvas.fillRect(200, 340, 600, 200, BLACK);
+  canvas.fillRect(200, 340, 600, 200, WHITE);
   if (nextEventFound) {
     canvas.drawString(nextEvent->Title, 230, 370);
     canvas.drawString(nextEvent->Organizer, 230, 440);
@@ -400,15 +401,15 @@ void DrawBookRoomArea() {
   if (!isFree || timeToNextEvent < 15)
     return;
 
-  canvas.fillRect(200, 340, 600, 200, BLACK);
+  canvas.fillRect(200, 340, 600, 200, WHITE);
 
   canvas.setTextColor(BLACK);
   canvas.setTextSize(3);
 
-  canvas.fillRect(240, 370, 130, 130, WHITE);
+  canvas.drawRect(240, 370, 130, 130, BLACK);
   canvas.drawString("15", 255, 390);
 
-  canvas.fillRect(430, 370, 130, 130, WHITE);
+  canvas.drawRect(430, 370, 130, 130, BLACK);
   canvas.drawString("30", 455, 390);
   if (timeToNextEvent < 30) {
     button30MinEnabled = false;
@@ -416,7 +417,7 @@ void DrawBookRoomArea() {
   } else
     button30MinEnabled = true;
 
-  canvas.fillRect(620, 370, 130, 130, WHITE);
+  canvas.drawRect(620, 370, 130, 130, BLACK);
   canvas.drawString("45", 645, 390);
   if (timeToNextEvent < 45) {
     button45MinEnabled = false;
@@ -446,7 +447,7 @@ void DisplayOperationMessage(String operationMessage) {
 }
 
 void HideBookRoomArea() {
-  canvas.fillRect(200, 340, 600, 200, BLACK);
+  canvas.fillRect(200, 340, 600, 200, WHITE);
   canvas.pushCanvas(0, 0, UPDATE_MODE_DU4);
 
   RefreshNextEvent();
@@ -655,10 +656,14 @@ void setup() {
   M5.TP.SetRotation(0);
   M5.EPD.Clear(true);
   M5.EPD.SetColorReverse(true);
-  canvas.createCanvas(960, 540);
+  canvas.createCanvas(660, 540);
   canvas.fillCanvas(WHITE);
   canvas.pushCanvas(0, 0, UPDATE_MODE_DU);
 
+  sensorsCanvas.createCanvas(200, 540);
+  sensorsCanvas.fillCanvas(WHITE);
+  sensorsCanvas.pushCanvas(0,0, UPDATE_MODE_GL16);
+  
   randomSeed(analogRead(0));
 
   if (!SPIFFS.begin(true)) {
@@ -667,7 +672,7 @@ void setup() {
   }
 
   canvas.setTextColor(BLACK);
-  canvas.setTextSize(3);
+  canvas.setTextSize(2);
   canvas.drawString("NOI Tech Park - IoT Door Signage", 10, 20);
   canvas.drawString("Connect to the WiFi '" + wifiSSID + "' ..", 10, 100);
   canvas.pushCanvas(0, 0, UPDATE_MODE_DU);
@@ -692,7 +697,7 @@ void setup() {
 
   Serial.println("connected!");
 
-  canvas.drawString("connected!", 700, 100);
+  canvas.drawString("connected!", 400, 100);
   canvas.drawString("Downloading icons on SPIFFS", 10, 150);
   canvas.pushCanvas(0, 0, UPDATE_MODE_DU);
 
