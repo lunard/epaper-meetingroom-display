@@ -140,7 +140,8 @@ void QueryRoomStatus() {
     roomDataUpdated = true;
     isFirstRoomDataUpdate = false;
   } else {
-    Serial.println("Error on HTTP request: " + String(httpCode));
+    String payload = http.getString();
+    Serial.println("QueryRoomStatus error:" + String(httpCode) + ", " + payload);
   }
   http.end();
 }
@@ -210,14 +211,17 @@ void DrawSeparatorLines() {
   centerCanvas.drawLine(0, 340, 599, 340, BLACK);  // horizontal separator line
 }
 
+void DrawRoomTitle() {
+  centerCanvas.setTextSize(2);
+  centerCanvas.setTextColor(BLACK);
+  centerCanvas.drawString(associatedRoom->displayName, 30, 20);
+}
 void DrawRoomData() {
 
   ReadRoomInfo();
 
   if (associatedRoom != NULL) {
-    centerCanvas.setTextSize(2);
-    centerCanvas.setTextColor(BLACK);
-    centerCanvas.drawString(associatedRoom->displayName, 30, 20);
+    DrawRoomTitle();
     // Serial.println("Update room name with: " + associatedRoom->displayName);
   } else {
     Serial.println("Associated room is NULL");
@@ -243,7 +247,8 @@ void ReadRoomInfo() {
     associatedRoom->displayName = doc["displayName"].as<String>();
     associatedRoom->location = doc["location"].as<String>();
   } else {
-    Serial.println("Error on HTTP request: " + String(httpCode));
+    String payload = http.getString();
+    Serial.println("ReadRoomInfo error:" + String(httpCode) + ", " + payload);
   }
   http.end();
 
@@ -253,6 +258,7 @@ void ReadRoomInfo() {
 void ReDrawCenterCanvas(bool strong = false) {
 
   const m5epd_update_mode_t refreshMode = strong ? UPDATE_MODE_GL16 : UPDATE_MODE_DU;
+  DrawRoomTitle();
   DrawSeparatorLines();
   centerCanvas.pushCanvas(200, 0, refreshMode);
   //M5.EPD.UpdateArea(200, 0, 600, 540, UPDATE_MODE_GL16);
@@ -276,7 +282,8 @@ void QuerySensorData() {
     serializeJsonPretty(doc, prettyJsonSensorData);
     Serial.println(prettyJsonSensorData);
   } else {
-    Serial.println("Error on HTTP request: " + String(httpCode));
+    String payload = http.getString();
+    Serial.println("QuerySensorData error:" + String(httpCode) + ", " + payload);
   }
   http.end();
 }
@@ -486,7 +493,8 @@ void SaveS3IconOnSPIFFS(String s3Filename) {
     file.close();
     Serial.println("downloadImage: saved image '" + String(s3Filename) + "' (" + String(count) + " bytes)");
   } else {
-    Serial.println("downloadImage error: " + String(httpCode));
+    String payload = http.getString();
+    Serial.println("SaveS3IconOnSPIFFS error:" + String(httpCode) + ", " + payload);
   }
 
   http.end();
