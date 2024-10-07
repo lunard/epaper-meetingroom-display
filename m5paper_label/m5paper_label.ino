@@ -4,8 +4,12 @@
 #include <WiFiClientSecure.h>
 #include <WiFiUdp.h>
 #include <NTPClient.h>
+#include "time.h"
+
 #include <SPIFFS.h>
 #include <ArduinoJson.h>
+
+// e-Ink resolution 960x540 pixel
 
 String baseAPIUrl = "https://meetingroominfo.testingmachine.eu/";
 DynamicJsonDocument doc(1024);
@@ -60,11 +64,13 @@ float tem;
 float hum;
 
 WiFiUDP ntpUDP;
-#define NTP_OFFSET 60 * 60  // In seconds
+#define NTP_OFFSET 60 * 60 * 2  // In seconds
 NTPClient timeClient(ntpUDP, "pool.ntp.org", NTP_OFFSET);
 rtc_time_t RTCtime;
 
-M5EPD_Canvas canvas(&M5.EPD);
+M5EPD_Canvas centerCanvas(&M5.EPD);
+M5EPD_Canvas sensorsCanvas(&M5.EPD);
+M5EPD_Canvas buttonsCanvas(&M5.EPD);
 
 bool detectTouch = true;
 tp_finger_t lastTouch;
@@ -134,7 +140,8 @@ void QueryRoomStatus() {
     roomDataUpdated = true;
     isFirstRoomDataUpdate = false;
   } else {
-    Serial.println("Error on HTTP request: " + String(httpCode));
+    String payload = http.getString();
+    Serial.println("QueryRoomStatus error:" + String(httpCode) + ", " + payload);
   }
   http.end();
 }
@@ -151,84 +158,70 @@ void SetupWiFiTask() {
     1);                    /* Core where the task should run */
 }
 
-void DrawSensorAndClockArea() {
-  canvas.fillRect(0, 0, 200, 540, WHITE);
-}
-
 void RefreshSensorArea() {
-  canvas.setTextColor(BLACK);
-  canvas.setTextSize(2);
+  sensorsCanvas.setTextColor(BLACK);
+  sensorsCanvas.setTextSize(3);
 
-  // M5.SHT30.UpdateData();
-  // tem = M5.SHT30.GetTemperature();
-  // hum = M5.SHT30.GetRelHumidity();
-  // Serial.printf("Temperature: %2.2f*C  Humidity: %0.2f%%\r\n", tem, hum);
-  // dtostrf(tem, 2, 1, temStr);
-  // dtostrf(hum, 2, 1, humStr);
+  sensorsCanvas.clear();
+  sensorsCanvas.fillRect(0, 0, 200, 540, WHITE);
 
-  canvas.fillRect(0, 60, 200, 540, WHITE);
+  // Refresh Time
+  sensorsCanvas.drawString(String("00" + String(RTCtime.hour)).substring(String(RTCtime.hour).length()) + ":" + String("00" + String(RTCtime.min)).substring(String(RTCtime.min).length()), 50, 20);
+
+
   if (sensorData->CO2 > 1200) {
-    canvas.drawPngFile(SPIFFS, "/CO2-warning-reverse-64.png", 25, 90);
+    sensorsCanvas.drawPngFile(SPIFFS, "/CO2-warning-reverse-64.png", 25, 90);
   } else {
-    canvas.drawPngFile(SPIFFS, "/CO2-reverse-64.png", 25, 90);
+    sensorsCanvas.drawPngFile(SPIFFS, "/CO2-reverse-64.png", 25, 90);
   }
-  canvas.drawString(String(sensorData->CO2), 100, 105);
+  sensorsCanvas.drawString(String(sensorData->CO2), 100, 110);
 
-  canvas.drawPngFile(SPIFFS, "/temperature-reverse-64.png", 25, 230);
-  canvas.drawString(String((int)sensorData->temperature), 95, 245);
+  sensorsCanvas.drawPngFile(SPIFFS, "/temperature-reverse-64.png", 25, 230);
+  sensorsCanvas.drawString(String((int)sensorData->temperature), 95, 250);
 
-  canvas.drawPngFile(SPIFFS, "/humidity-reverse-64.png", 25, 380);
-  canvas.drawString(String((int)sensorData->humidity), 95, 395);
+  sensorsCanvas.drawPngFile(SPIFFS, "/humidity-reverse-64.png", 25, 380);
+  sensorsCanvas.drawString(String((int)sensorData->humidity), 95, 400);
 
+  sensorsCanvas.pushCanvas(0, 0, UPDATE_MODE_DU);
   Serial.println("DrawSensorArea done");
 }
 
-void RefreshTime() {
-  canvas.setTextColor(BLACK);
-  canvas.setTextSize(2);
-
-  canvas.fillRect(0, 0, 200, 60, WHITE);
-  canvas.drawString(String("00" + String(RTCtime.hour)).substring(String(RTCtime.hour).length()) + ":" + String("00" + String(RTCtime.min)).substring(String(RTCtime.min).length()), 50, 20);
-
-  canvas.pushCanvas(0, 0, UPDATE_MODE_DU);
-}
-
-void DrawButtonArea() {
-  canvas.fillRect(802, 0, 158, 340, WHITE);
-  canvas.fillRect(802, 340, 158, 200, BLACK);
-}
-
 void DrawButtons() {
+  buttonsCanvas.fillRect(0, 0, 160, 540, WHITE);
+
   if (isFree) {
     if (timeToNextEvent > 15)
-      canvas.drawPngFile(SPIFFS, "/add-event-reverse-64.png", 840, 170);
+      buttonsCanvas.drawPngFile(SPIFFS, "/add-event-reverse-64.png", 40, 170);
   } else {
     if (currentEvent->bookedByLabel)
-      canvas.drawPngFile(SPIFFS, "/delete-event-reverse-64.png", 840, 170);
+      buttonsCanvas.drawPngFile(SPIFFS, "/delete-event-reverse-64.png", 40, 170);
   }
+  buttonsCanvas.pushCanvas(800, 0, UPDATE_MODE_DU);
   Serial.println("DrawButtons done");
 }
 
-void DrawCalendarEventArea() {
-  canvas.fillRect(200, 0, 600, 340, WHITE);
-  canvas.fillRect(200, 340, 600, 200, BLACK);
+void CleanCenterCanvas() {
+  centerCanvas.fillRect(0, 0, 600, 540, WHITE);
+  centerCanvas.pushCanvas(200, 0, UPDATE_MODE_DU);
 }
 
 void DrawSeparatorLines() {
-  canvas.fillRect(200, 0, 2, 540, BLACK);    // left vertical separator line
-  canvas.fillRect(800, 0, 2, 340, BLACK);    // right vertical separator line - up
-  canvas.fillRect(800, 340, 2, 240, WHITE);  // right vertical separator line - down
-  canvas.fillRect(202, 340, 758, 2, BLACK);  // right horizontal separator line
+  centerCanvas.drawLine(0, 0, 0, 540, BLACK);      // left vertical separator line
+  centerCanvas.drawLine(599, 0, 599, 540, BLACK);  // right vertical separator line
+  centerCanvas.drawLine(0, 340, 599, 340, BLACK);  // horizontal separator line
 }
 
+void DrawRoomTitle() {
+  centerCanvas.setTextSize(2);
+  centerCanvas.setTextColor(BLACK);
+  centerCanvas.drawString(associatedRoom->displayName, 30, 20);
+}
 void DrawRoomData() {
 
   ReadRoomInfo();
 
   if (associatedRoom != NULL) {
-    canvas.setTextSize(2);
-    canvas.setTextColor(BLACK);
-    canvas.drawString(associatedRoom->displayName, 230, 20);
+    DrawRoomTitle();
     // Serial.println("Update room name with: " + associatedRoom->displayName);
   } else {
     Serial.println("Associated room is NULL");
@@ -254,11 +247,21 @@ void ReadRoomInfo() {
     associatedRoom->displayName = doc["displayName"].as<String>();
     associatedRoom->location = doc["location"].as<String>();
   } else {
-    Serial.println("Error on HTTP request: " + String(httpCode));
+    String payload = http.getString();
+    Serial.println("ReadRoomInfo error:" + String(httpCode) + ", " + payload);
   }
   http.end();
 
   Serial.println("ReadRoomInfo done");
+}
+
+void ReDrawCenterCanvas(bool strong = false) {
+
+  const m5epd_update_mode_t refreshMode = strong ? UPDATE_MODE_GL16 : UPDATE_MODE_DU;
+  DrawRoomTitle();
+  DrawSeparatorLines();
+  centerCanvas.pushCanvas(200, 0, refreshMode);
+  //M5.EPD.UpdateArea(200, 0, 600, 540, UPDATE_MODE_GL16);
 }
 
 void QuerySensorData() {
@@ -279,7 +282,8 @@ void QuerySensorData() {
     serializeJsonPretty(doc, prettyJsonSensorData);
     Serial.println(prettyJsonSensorData);
   } else {
-    Serial.println("Error on HTTP request: " + String(httpCode));
+    String payload = http.getString();
+    Serial.println("QuerySensorData error:" + String(httpCode) + ", " + payload);
   }
   http.end();
 }
@@ -293,30 +297,34 @@ void RefreshCurrentEvent() {
   if (isFree) {
     if (!wasFree) {
       // already drew
-      canvas.fillRect(802, 0, 158, 340, WHITE);   // cleanup right upper button area
-      canvas.fillRect(202, 80, 590, 260, WHITE);  // cleanup current event Area
+      buttonsCanvas.fillRect(0, 0, 160, 340, WHITE);  // cleanup upper button area
+      centerCanvas.fillRect(0, 80, 600, 260, WHITE);  // cleanup 'current event' area
 
-      canvas.setTextColor(BLACK);
-      canvas.setTextSize(5);
+      centerCanvas.setTextColor(BLACK);
+      centerCanvas.setTextSize(5);
 
-      canvas.setFreeFont(&FreeSansBold12pt7b);
-      canvas.drawString("Free", 380, 140);
-      canvas.setFreeFont(&FreeSerif12pt7b);
+      centerCanvas.setFreeFont(&FreeSansBold12pt7b);
+      centerCanvas.drawString("Free", 180, 140);
+      centerCanvas.setFreeFont(&FreeSerif12pt7b);
     }
 
     wasFree = true;
   } else {
     if (wasFree) {
       // cleanup
-      canvas.fillRect(802, 0, 158, 340, WHITE);   // cleanup right upper button area
-      canvas.fillRect(202, 80, 590, 260, WHITE);  // cleanup current event Area
+      buttonsCanvas.fillRect(0, 0, 160, 340, WHITE);  // cleanup upper button area
+      centerCanvas.fillRect(0, 80, 600, 260, WHITE);  // cleanup 'current event' area
     }
-    canvas.setTextColor(BLACK);
-    canvas.setTextSize(2);
-    canvas.drawString(currentEvent->Title, 230, 130);
 
-    canvas.setTextSize(1);
-    canvas.drawString(currentEvent->Organizer, 230, 200);
+    centerCanvas.setTextColor(BLACK);
+    centerCanvas.setTextSize(2);
+    if (currentEvent->Title.length() > 20)
+      centerCanvas.drawString(currentEvent->Title.substring(0, 20) + "..", 30, 130);
+    else
+      centerCanvas.drawString(currentEvent->Title, 30, 130);
+
+    centerCanvas.setTextSize(1);
+    centerCanvas.drawString(currentEvent->Organizer, 30, 200);
 
     Serial.println("RefreshCurrentEvent: updated current event");
 
@@ -325,8 +333,8 @@ void RefreshCurrentEvent() {
     wasFree = false;
   }
 
-  DrawButtons();
-  canvas.pushCanvas(0, 0, UPDATE_MODE_DU);
+  ReDrawCenterCanvas();
+  buttonsCanvas.pushCanvas(800, 0, UPDATE_MODE_DU);
   Serial.println("RefreshCurrentEvent done");
 }
 
@@ -334,65 +342,63 @@ void RefreshNextEvent() {
   if (bookingRoomAreaShown)  // this area is used for booking the room
     return;
 
-  canvas.setTextColor(WHITE);
-  canvas.setTextSize(1);
+  centerCanvas.setTextColor(BLACK);
+  centerCanvas.setTextSize(1);
   // cleanup
-  canvas.fillRect(200, 340, 600, 200, BLACK);
+  centerCanvas.fillRect(0, 340, 600, 200, WHITE);
   if (nextEventFound) {
-    canvas.drawString(nextEvent->Title, 230, 370);
-    canvas.drawString(nextEvent->Organizer, 230, 440);
-    canvas.drawString(nextEvent->StartAt + " - " + nextEvent->EndAt, 230, 480);
+    if (nextEvent->Title.length() > 20)
+      centerCanvas.drawString(nextEvent->Title.substring(0, 20) + "..", 30, 370);
+    else
+      centerCanvas.drawString(nextEvent->Title, 30, 370);
+    centerCanvas.drawString(nextEvent->Organizer, 30, 440);
+    centerCanvas.drawString(nextEvent->StartAt + " - " + nextEvent->EndAt, 30, 480);
   }
-  canvas.pushCanvas(0, 0, UPDATE_MODE_DU);
+  ReDrawCenterCanvas();
 }
 
 void DrawTimeToNextEvent() {
   if (!isFree)
     return;
   // cleanup string
-  canvas.fillRect(310, 280, 400, 40, WHITE);
+  centerCanvas.fillRect(110, 280, 399, 40, WHITE);
 
-  canvas.setTextColor(BLACK);
-  canvas.setTextSize(2);
+  centerCanvas.setTextColor(BLACK);
+  centerCanvas.setTextSize(2);
 
-  canvas.drawString("Free for " + String(timeToNextEvent) + " minutes", 310, 280);
-  canvas.drawPngFile(SPIFFS, "/free-for-clock-reverse-64.png", 215, 265);
+  centerCanvas.drawString("Free for " + String(timeToNextEvent) + " minutes", 110, 280);
+  centerCanvas.drawPngFile(SPIFFS, "/free-for-clock-reverse-64.png", 15, 265);
   Serial.println("DrawTimeToNextEvent done: " + String(timeToNextEvent) + " minutes");
 
-  canvas.pushCanvas(0, 0, UPDATE_MODE_DU);
+  ReDrawCenterCanvas();
 }
 
 void DrawCurrenEventTime() {
   // cleanup string
-  canvas.fillRect(205, 280, 595, 40, WHITE);
+  centerCanvas.fillRect(5, 280, 600, 40, WHITE);
 
-  canvas.setTextColor(BLACK);
-  canvas.setTextSize(2);
+  centerCanvas.setTextColor(BLACK);
+  centerCanvas.setTextSize(2);
 
-  canvas.drawPngFile(SPIFFS, "/starts-at-reverse-64.png", 215, 265);
-  canvas.drawPngFile(SPIFFS, "/ends-at-reverse-64.png", 600, 265);
-  canvas.drawString(currentEvent->StartAt, 300, 280);
-  canvas.drawString(currentEvent->EndAt, 675, 280);
+  centerCanvas.drawPngFile(SPIFFS, "/starts-at-reverse-64.png", 15, 265);
+  centerCanvas.drawPngFile(SPIFFS, "/ends-at-reverse-64.png", 400, 265);
+  centerCanvas.drawString(currentEvent->StartAt, 100, 280);
+  centerCanvas.drawString(currentEvent->EndAt, 475, 280);
   Serial.println("DrawCurrenEventTime done: " + currentEvent->StartAt + " - " + currentEvent->EndAt);
 }
 
 void InizializeLabel() {
 
   // See Font list here https://learn.adafruit.com/adafruit-gfx-graphics-library/using-fonts
-  canvas.setFreeFont(&FreeSerif12pt7b);
+  centerCanvas.setFreeFont(&FreeSerif12pt7b);
 
-  canvas.clear();
-  canvas.fillCanvas(BLACK);
+  CleanCenterCanvas();
 
-  DrawCalendarEventArea();
-  DrawButtonArea();
-  DrawSeparatorLines();
   DrawRoomData();
-  DrawSensorAndClockArea();
-
   RefreshSensorArea();
 
-  canvas.pushCanvas(0, 0, UPDATE_MODE_DU);
+  ReDrawCenterCanvas();
+
   Serial.println("InizializeLabel done");
 }
 
@@ -400,56 +406,55 @@ void DrawBookRoomArea() {
   if (!isFree || timeToNextEvent < 15)
     return;
 
-  canvas.fillRect(200, 340, 600, 200, BLACK);
+  centerCanvas.fillRect(0, 340, 600, 200, WHITE);
 
-  canvas.setTextColor(BLACK);
-  canvas.setTextSize(3);
+  centerCanvas.setTextColor(BLACK);
+  centerCanvas.setTextSize(3);
 
-  canvas.fillRect(240, 370, 130, 130, WHITE);
-  canvas.drawString("15", 255, 390);
+  centerCanvas.drawRect(40, 370, 130, 130, BLACK);
+  centerCanvas.drawString("15", 55, 390);
 
-  canvas.fillRect(430, 370, 130, 130, WHITE);
-  canvas.drawString("30", 455, 390);
+  centerCanvas.drawRect(230, 370, 130, 130, BLACK);
+  centerCanvas.drawString("30", 255, 390);
   if (timeToNextEvent < 30) {
     button30MinEnabled = false;
-    canvas.drawLine(430, 370, 560, 500, BLACK);
+    centerCanvas.drawLine(230, 370, 360, 500, BLACK);
   } else
     button30MinEnabled = true;
 
-  canvas.fillRect(620, 370, 130, 130, WHITE);
-  canvas.drawString("45", 645, 390);
+  centerCanvas.drawRect(420, 370, 130, 130, BLACK);
+  centerCanvas.drawString("45", 445, 390);
   if (timeToNextEvent < 45) {
     button45MinEnabled = false;
-    canvas.drawLine(620, 370, 750, 500, BLACK);
+    centerCanvas.drawLine(420, 370, 550, 500, BLACK);
   } else
     button45MinEnabled = true;
 
-  canvas.setTextSize(2);
-  canvas.drawString("min", 265, 455);
-  canvas.drawString("min", 455, 455);
-  canvas.drawString("min", 645, 455);
+  centerCanvas.setTextSize(2);
+  centerCanvas.drawString("min", 65, 455);
+  centerCanvas.drawString("min", 255, 455);
+  centerCanvas.drawString("min", 445, 455);
 
-  canvas.pushCanvas(0, 0, UPDATE_MODE_DU);
+  ReDrawCenterCanvas();
 }
 
 void DisplayOperationMessage(String operationMessage) {
   // already drew
-  canvas.fillRect(802, 0, 158, 340, WHITE);   // cleanup right upper button area
-  canvas.fillRect(202, 80, 590, 260, WHITE);  // cleanup current event Area
+  centerCanvas.fillRect(0, 0, 600, 540, WHITE);  // cleanup
 
-  canvas.setTextColor(BLACK);
-  canvas.setTextSize(2);
+  centerCanvas.setTextColor(BLACK);
+  centerCanvas.setTextSize(2);
 
-  canvas.drawString(operationMessage, 230, 140);
+  centerCanvas.drawString(operationMessage, 30, 140);
 
-  canvas.pushCanvas(0, 0, UPDATE_MODE_DU);
+  ReDrawCenterCanvas();
 }
 
 void HideBookRoomArea() {
-  canvas.fillRect(200, 340, 600, 200, BLACK);
-  canvas.pushCanvas(0, 0, UPDATE_MODE_DU4);
-
+  centerCanvas.fillRect(1, 341, 599, 539, WHITE);
   RefreshNextEvent();
+
+  ReDrawCenterCanvas(true);
   Serial.println("HideBookRoomArea done");
 }
 
@@ -488,7 +493,8 @@ void SaveS3IconOnSPIFFS(String s3Filename) {
     file.close();
     Serial.println("downloadImage: saved image '" + String(s3Filename) + "' (" + String(count) + " bytes)");
   } else {
-    Serial.println("downloadImage error: " + String(httpCode));
+    String payload = http.getString();
+    Serial.println("SaveS3IconOnSPIFFS error:" + String(httpCode) + ", " + payload);
   }
 
   http.end();
@@ -497,6 +503,7 @@ void SaveS3IconOnSPIFFS(String s3Filename) {
 void Refresh() {
   QuerySensorData();
   RefreshCurrentEvent();
+  DrawButtons();
   RefreshNextEvent();
   RefreshSensorArea();
 }
@@ -604,6 +611,19 @@ void SetupRTC() {
   timeClient.begin();
   timeClient.update();
 
+  //Get a time structure
+  time_t epochTime = timeClient.getEpochTime();
+  struct tm *ptm = gmtime((time_t *)&epochTime);
+  int currentMonth = ptm->tm_mon + 1;
+  int monthDay = ptm->tm_mday;
+
+  if (
+    (currentMonth >= 10 && monthDay >= 27 && timeClient.getHours() >= 3)       // on 31 march 2024, at 02:00 clocks were turned forward 1 hour
+    || (currentMonth <= 3 && monthDay <= 31 && timeClient.getHours() <= 2)) {  // on 27 October at 03:00 clocks are turned backward 1 hour
+    timeClient.setTimeOffset(NTP_OFFSET / 2);
+    timeClient.update();
+  }
+
   RTCtime.hour = timeClient.getHours();
   RTCtime.min = timeClient.getMinutes();
   RTCtime.sec = timeClient.getSeconds();
@@ -655,9 +675,27 @@ void setup() {
   M5.TP.SetRotation(0);
   M5.EPD.Clear(true);
   M5.EPD.SetColorReverse(true);
-  canvas.createCanvas(960, 540);
-  canvas.fillCanvas(WHITE);
-  canvas.pushCanvas(0, 0, UPDATE_MODE_DU);
+  M5.EPD.UpdateArea(0, 0, 960, 540, UPDATE_MODE_DU);
+
+
+  // Setup Canvas!
+  // ---------------------
+  // |  |             |  |
+  // |  |             |  |
+  // ---------------------
+  // 0  200         800  960
+
+  sensorsCanvas.createCanvas(200, 540);
+  sensorsCanvas.fillCanvas(WHITE);
+  sensorsCanvas.pushCanvas(0, 0, UPDATE_MODE_DU);
+
+  centerCanvas.createCanvas(600, 540);
+  centerCanvas.fillCanvas(WHITE);
+  centerCanvas.pushCanvas(200, 0, UPDATE_MODE_DU);
+
+  buttonsCanvas.createCanvas(160, 540);
+  buttonsCanvas.fillCanvas(WHITE);
+  buttonsCanvas.pushCanvas(800, 0, UPDATE_MODE_DU);
 
   randomSeed(analogRead(0));
 
@@ -666,11 +704,11 @@ void setup() {
     return;
   }
 
-  canvas.setTextColor(BLACK);
-  canvas.setTextSize(3);
-  canvas.drawString("NOI Tech Park - IoT Door Signage", 10, 20);
-  canvas.drawString("Connect to the WiFi '" + wifiSSID + "' ..", 10, 100);
-  canvas.pushCanvas(0, 0, UPDATE_MODE_DU);
+  centerCanvas.setTextColor(BLACK);
+  centerCanvas.setTextSize(2);
+  centerCanvas.drawString("NOI Tech Park - IoT Door Signage", 10, 20);
+  centerCanvas.drawString("Connect to the WiFi '" + wifiSSID + "' ..", 10, 100);
+  centerCanvas.pushCanvas(200, 0, UPDATE_MODE_DU);
 
   WiFi.begin(wifiSSID, "");
   Serial.print("Connect to the WiFi '" + wifiSSID + "'");
@@ -684,27 +722,62 @@ void setup() {
 
   if (WiFi.status() != WL_CONNECTED) {
     // Reboot the device
-    canvas.drawString("cannot connect..rebooting!", 600, 100);
-    canvas.pushCanvas(0, 0, UPDATE_MODE_DU);
+    centerCanvas.drawString("cannot connect..rebooting!", 600, 100);
+    centerCanvas.pushCanvas(200, 0, UPDATE_MODE_DU);
     Serial.println("cannot connect..rebooting!");
     ESP.restart();
   }
 
   Serial.println("connected!");
 
-  canvas.drawString("connected!", 700, 100);
-  canvas.drawString("Downloading icons on SPIFFS", 10, 150);
-  canvas.pushCanvas(0, 0, UPDATE_MODE_DU);
+  centerCanvas.drawString("connected!", 400, 100);
+  centerCanvas.drawString("Downloading icons on SPIFFS", 10, 150);
+  centerCanvas.pushCanvas(200, 0, UPDATE_MODE_DU);
 
+  int x = 380;
   SaveS3IconOnSPIFFS("starts-at-reverse-64.png");
+  centerCanvas.drawString(".", x, 150);
+  centerCanvas.pushCanvas(200, 0, UPDATE_MODE_DU);
+
+  x = x + 10;
   SaveS3IconOnSPIFFS("ends-at-reverse-64.png");
+  centerCanvas.drawString(".", x, 150);
+  centerCanvas.pushCanvas(200, 0, UPDATE_MODE_DU);
+
+  x = x + 10;
   SaveS3IconOnSPIFFS("CO2-reverse-64.png");
+  centerCanvas.drawString(".", x, 150);
+  centerCanvas.pushCanvas(200, 0, UPDATE_MODE_DU);
+
+  x = x + 10;
   SaveS3IconOnSPIFFS("CO2-warning-reverse-64.png");
+  centerCanvas.drawString(".", x, 150);
+  centerCanvas.pushCanvas(200, 0, UPDATE_MODE_DU);
+
+  x = x + 10;
   SaveS3IconOnSPIFFS("temperature-reverse-64.png");
+  centerCanvas.drawString(".", x, 150);
+  centerCanvas.pushCanvas(200, 0, UPDATE_MODE_DU);
+
+  x = x + 10;
   SaveS3IconOnSPIFFS("humidity-reverse-64.png");
+  centerCanvas.drawString(".", x, 150);
+  centerCanvas.pushCanvas(200, 0, UPDATE_MODE_DU);
+
+  x = x + 10;
   SaveS3IconOnSPIFFS("add-event-reverse-64.png");
+  centerCanvas.drawString(".", x, 150);
+  centerCanvas.pushCanvas(200, 0, UPDATE_MODE_DU);
+
+  x = x + 10;
   SaveS3IconOnSPIFFS("delete-event-reverse-64.png");
+  centerCanvas.drawString(".", x, 150);
+  centerCanvas.pushCanvas(200, 0, UPDATE_MODE_DU);
+
+  x = x + 10;
   SaveS3IconOnSPIFFS("free-for-clock-reverse-64.png");
+  centerCanvas.drawString(".", x, 150);
+  centerCanvas.pushCanvas(200, 0, UPDATE_MODE_DU);
 
   SetupWiFiTask();
 
@@ -713,7 +786,7 @@ void setup() {
   InizializeLabel();
 
   // canvas.drawString("Ready .. let's start a quick demo!", 10, 200);
-  // canvas.pushCanvas(0, 0, UPDATE_MODE_DU);
+  // canvas.pushCanvas(200, 0, UPDATE_MODE_DU);
   // StartDemo();
 }
 
@@ -762,6 +835,7 @@ void loop() {
 
               RefreshCurrentEvent();
               RefreshNextEvent();
+              DrawButtons();
               // reset
               roomDataUpdated = false;
             }
@@ -778,6 +852,7 @@ void loop() {
 
               roomDataUpdated = true;
               RefreshCurrentEvent();
+              DrawButtons();
               roomDataUpdated = false;
             } else if (timeToNextEvent > 15) {
 
@@ -801,7 +876,6 @@ void loop() {
       Refresh();
 
     DrawTimeToNextEvent();
-    RefreshTime();
     // Reset
     roomDataUpdated = false;
     roomStatusChanged = false;
