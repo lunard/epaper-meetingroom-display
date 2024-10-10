@@ -22,8 +22,17 @@ public:
   String StartAt;
   String EndAt;
   bool bookedByLabel;
+
   String ToString() {
     return Title + Organizer + StartAt + EndAt;
+  }
+
+  void Clear() {
+    Title = "";
+    Organizer = "";
+    StartAt = "";
+    EndAt = "";
+    bookedByLabel = false;
   }
 };
 
@@ -94,6 +103,7 @@ void QueryRoomStatusTask(void *parameter) {
   }
 }
 
+int count = 0;
 void QueryRoomStatus() {
   HTTPClient http;
   http.begin(baseAPIUrl + "api/room/status");
@@ -113,6 +123,7 @@ void QueryRoomStatus() {
     JsonVariant ce = doc["currentEvent"];
     if (ce.isNull()) {
       isFree = true;
+      currentEvent->Clear();
     } else {
       isFree = false;
       currentEvent->Title = ce["title"].as<String>();
@@ -125,6 +136,7 @@ void QueryRoomStatus() {
     JsonVariant ne = doc["nextEvent"];
     if (ne.isNull()) {
       nextEventFound = false;
+      nextEvent->Clear();
     } else {
       nextEventFound = true;
       nextEvent->Title = ne["title"].as<String>();
@@ -134,11 +146,28 @@ void QueryRoomStatus() {
       // nextEvent->bookedByLabel = ne["bookedByLabel"].as<bool>();
     }
 
+    // -- BEGIN TEST --
+    // if (count >= 1 && count <= 3) {
+    //   Serial.println("--- TEST: show next event!!");
+    //   nextEvent->Title = "Test long title for next event";
+    //   nextEvent->Organizer = "Luca Nardelli";
+    //   nextEvent->StartAt = "18:30";
+    //   nextEvent->EndAt = "19:30";
+    //   nextEventFound = true;
+    // } else {
+    //   Serial.println("--- TEST: hide next event!!");
+    //   nextEvent->Clear();
+    //   nextEventFound = false;
+    // }
+    // count++;
+    // -- END TEST --
+
     String newStatus = isFree ? "yes" : "no" + currentEvent->ToString() + nextEvent->ToString();
 
     roomStatusChanged = isFirstRoomDataUpdate || currentStatus != newStatus;
     roomDataUpdated = true;
     isFirstRoomDataUpdate = false;
+
   } else {
     String payload = http.getString();
     Serial.println("QueryRoomStatus error:" + String(httpCode) + ", " + payload);
@@ -318,13 +347,13 @@ void RefreshCurrentEvent() {
 
     centerCanvas.setTextColor(BLACK);
     centerCanvas.setTextSize(2);
-    if (currentEvent->Title.length() > 20)
-      centerCanvas.drawString(currentEvent->Title.substring(0, 20) + "..", 30, 130);
+    if (currentEvent->Title.length() > 25)
+      centerCanvas.drawString(currentEvent->Title.substring(0, 25) + "..", 30, 130);
     else
       centerCanvas.drawString(currentEvent->Title, 30, 130);
 
     centerCanvas.setTextSize(1);
-    centerCanvas.drawString(currentEvent->Organizer, 30, 200);
+    centerCanvas.drawString(currentEvent->Organizer, 35, 200);
 
     Serial.println("RefreshCurrentEvent: updated current event");
 
@@ -339,22 +368,26 @@ void RefreshCurrentEvent() {
 }
 
 void RefreshNextEvent() {
-  if (bookingRoomAreaShown)  // this area is used for booking the room
+  if (bookingRoomAreaShown) {  // this area is used for booking the room
+    Serial.println("Skip RefreshNextEvent");
     return;
+  }
 
   centerCanvas.setTextColor(BLACK);
   centerCanvas.setTextSize(1);
   // cleanup
   centerCanvas.fillRect(0, 340, 600, 200, WHITE);
   if (nextEventFound) {
-    if (nextEvent->Title.length() > 20)
-      centerCanvas.drawString(nextEvent->Title.substring(0, 20) + "..", 30, 370);
+    if (nextEvent->Title.length() > 40)
+      centerCanvas.drawString(nextEvent->Title.substring(0, 40) + "..", 30, 370);
     else
       centerCanvas.drawString(nextEvent->Title, 30, 370);
     centerCanvas.drawString(nextEvent->Organizer, 30, 440);
     centerCanvas.drawString(nextEvent->StartAt + " - " + nextEvent->EndAt, 30, 480);
   }
   ReDrawCenterCanvas();
+
+  Serial.println("RefreshNextEvent done");
 }
 
 void DrawTimeToNextEvent() {
@@ -467,6 +500,11 @@ void SaveS3IconOnSPIFFS(String s3Filename) {
   int httpCode = http.GET();
 
   if (httpCode == 200) {
+    if(SPIFFS.exists("/" + s3Filename)){
+      Serial.println("File '"+s3Filename+"' found in memory!");
+      return;
+    }
+
     File file = SPIFFS.open("/" + s3Filename, FILE_WRITE);
     if (!file) {
       Serial.println("Failed to open file for writing");
@@ -480,7 +518,7 @@ void SaveS3IconOnSPIFFS(String s3Filename) {
     }
 
     while (stream->available() == 0) {
-      Serial.println("Zero bytes availables");
+      Serial.println("Zero bytes availables by the remote server");
       delay(100);
     }
 
@@ -887,8 +925,8 @@ void loop() {
     HideBookRoomArea();
   }
 
-  if (RTCtime.sec % 15 == 0)
-    RefreshSensorArea();
+  // if (RTCtime.sec % 15 == 0)
+  //   RefreshSensorArea();
 
   delay(20);
 }
