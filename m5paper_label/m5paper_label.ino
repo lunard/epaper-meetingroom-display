@@ -17,11 +17,11 @@ char prettyJsonSensorData[512];
 
 class CalendarEvent {
 public:
-  String Title;
-  String Organizer;
-  String StartAt;
-  String EndAt;
-  bool bookedByLabel;
+  String Title = "";
+  String Organizer = "";
+  String StartAt = "";
+  String EndAt = "";
+  bool bookedByLabel = false;
 
   String ToString() {
     return Title + Organizer + StartAt + EndAt;
@@ -60,6 +60,8 @@ bool roomStatusChanged = true;
 bool isFirstRoomDataUpdate = true;
 
 String wifiSSID = "openAiR";
+String wifiPassword = "";
+
 
 CalendarEvent *currentEvent = new CalendarEvent();
 CalendarEvent *nextEvent = new CalendarEvent();
@@ -103,6 +105,12 @@ void QueryRoomStatusTask(void *parameter) {
   }
 }
 
+String getEventsStatus() {
+  String nextEventFoundStr = nextEventFound ? "yes" : "no";
+  String isFreeStr = isFree ? "yes" : "no";
+  return nextEventFoundStr + isFreeStr + currentEvent->ToString() + nextEvent->ToString();
+}
+
 int count = 0;
 void QueryRoomStatus() {
   HTTPClient http;
@@ -115,7 +123,8 @@ void QueryRoomStatus() {
     Serial.println(payload);
     deserializeJson(doc, payload);
 
-    String currentStatus = isFree ? "yes" : "no" + currentEvent->ToString() + nextEvent->ToString();
+    String currentStatus = getEventsStatus();
+    //Serial.println("currentStatus:" + currentStatus);
 
     isFree = doc["isFree"];
     timeToNextEvent = doc["timeToNextEvent"];
@@ -162,7 +171,8 @@ void QueryRoomStatus() {
     // count++;
     // -- END TEST --
 
-    String newStatus = isFree ? "yes" : "no" + currentEvent->ToString() + nextEvent->ToString();
+    String newStatus = getEventsStatus();
+    //Serial.println("newStatus:" + newStatus);
 
     roomStatusChanged = isFirstRoomDataUpdate || currentStatus != newStatus;
     roomDataUpdated = true;
@@ -269,7 +279,7 @@ void ReadRoomInfo() {
   int httpCode = http.GET();
   if (httpCode == 200) {
     String payload = http.getString();
-    Serial.println(payload);
+    //Serial.println(payload);
     deserializeJson(doc, payload);
 
     associatedRoom->email = doc["email"].as<String>();
@@ -309,7 +319,7 @@ void QuerySensorData() {
     sensorData->humidity = doc["humidity"].as<float>();
 
     serializeJsonPretty(doc, prettyJsonSensorData);
-    Serial.println(prettyJsonSensorData);
+    //Serial.println(prettyJsonSensorData);
   } else {
     String payload = http.getString();
     Serial.println("QuerySensorData error:" + String(httpCode) + ", " + payload);
@@ -500,8 +510,8 @@ void SaveS3IconOnSPIFFS(String s3Filename) {
   int httpCode = http.GET();
 
   if (httpCode == 200) {
-    if(SPIFFS.exists("/" + s3Filename)){
-      Serial.println("File '"+s3Filename+"' found in memory!");
+    if (SPIFFS.exists("/" + s3Filename)) {
+      Serial.println("File '" + s3Filename + "' found in memory!");
       return;
     }
 
@@ -748,7 +758,7 @@ void setup() {
   centerCanvas.drawString("Connect to the WiFi '" + wifiSSID + "' ..", 10, 100);
   centerCanvas.pushCanvas(200, 0, UPDATE_MODE_DU);
 
-  WiFi.begin(wifiSSID, "");
+  WiFi.begin(wifiSSID, wifiPassword);
   Serial.print("Connect to the WiFi '" + wifiSSID + "'");
   int wifiCount = 0;
 
